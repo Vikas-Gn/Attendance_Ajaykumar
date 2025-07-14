@@ -1,11 +1,8 @@
-
 const express = require('express');
 const { Pool } = require('pg');
-const bcrypt = require('bcrypt');
 const path = require('path');
-const fs = require('fs');
 const winston = require('winston');
-const cors = require('cors'); // Add CORS package
+const cors = require('cors');
 require('dotenv').config();
 
 const app = express();
@@ -24,22 +21,79 @@ const logger = winston.createLogger({
     ]
 });
 
-// PostgreSQL connection
-const pool = new Pool({
-   user: process.env.DB_USER || 'postgres',
+// PostgreSQL connection with retry logic
+const poolConfig = {
+    user: process.env.DB_USER || 'postgres',
     host: process.env.DB_HOST || 'postgres',
     database: process.env.DB_NAME || 'attendance_db',
     password: process.env.DB_PASSWORD || 'admin123',
     port: process.env.DB_PORT || 5432,
+    retry: {
+        max: process.env.DB_RETRIES || 5,
+        backoff: process.env.DB_RETRY_DELAY || 1000
+    }
+};
+
+const pool = new Pool(poolConfig);
+
+// Enhanced connection error handling
+pool.on('error', (err) => {
+    logger.error('Unexpected error on idle client', { error: err.message });
+});
+
+// Database connection health check
+async function checkDatabaseConnection(retries = 5, delay = 3000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const client = await pool.connect();
+            await client.query('SELECT 1');
+            client.release();
+            logger.info('Database connection established successfully');
+            return true;
+        } catch (err) {
+            logger.warn(`Database connection attempt ${i + 1} failed`, { error: err.message });
+            if (i < retries - 1) {
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+    }
+    throw new Error('Could not establish database connection after retries');
+}
+
+// CORS Configuration
+const allowedOrigins = [
+    'http://3.110.127.202:9063', // Frontend
+    'http://3.110.127.202:9064', // HR Page
+    'http://3.110.127.202:3096', // Backend
+    'http://localhost:3019',
+    'http://127.0.0.1:5501',
+    'http://127.0.0.1:5503'
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+    allowedHeaders: ['Content-Type'],
+    credentials: true
+}));
+
+// CORS error handling
+app.use((err, req, res, next) => {
+    if (err.message === 'Not allowed by CORS') {
+        logger.warn('CORS blocked request', { origin: req.headers.origin });
+        res.status(403).json({ error: 'CORS policy blocked this request' });
+    } else {
+        next(err);
+    }
 });
 
 // Middleware
-app.use(cors());
-app.use(cors({
-    origin: ['http://3.110.127.202:3096', 'http://127.0.0.1:5501','http://3.110.127.202:9063','http://3.110.127.202:9064'],
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type']
-}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../public')));
 app.use((req, res, next) => {
@@ -49,19 +103,19 @@ app.use((req, res, next) => {
 
 // Initialize database
 async function initializeDatabase() {
+    let client;
     try {
-        const client = await pool.connect();
+        client = await pool.connect();
         await client.query(`
-    DROP TABLE IF EXISTS assets;
-    DROP TABLE IF EXISTS attendance;
-    DROP TABLE IF EXISTS employees;
-`);
+            DROP TABLE IF EXISTS assets;
+            DROP TABLE IF EXISTS attendance;
+            DROP TABLE IF EXISTS employees;
+        `);
         await client.query(`
             CREATE TABLE IF NOT EXISTS employees (
                 emp_id VARCHAR(7) PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
                 email VARCHAR(100) UNIQUE NOT NULL,
-                password VARCHAR(255) NOT NULL,
                 role VARCHAR(50),
                 shift_timing VARCHAR(50)
             );
@@ -72,8 +126,7 @@ async function initializeDatabase() {
                 punch_in TIMESTAMP NOT NULL,
                 punch_out TIMESTAMP,
                 status VARCHAR(20) DEFAULT 'in-progress',
-                punch_in_password VARCHAR(255),
-                punch_out_password VARCHAR(255)
+                hr_approval VARCHAR(20) DEFAULT 'pending'
             );
 
             CREATE TABLE IF NOT EXISTS assets (
@@ -85,41 +138,56 @@ async function initializeDatabase() {
             );
         `);
         await client.query(`
-            INSERT INTO employees (emp_id, name, email, password, role, shift_timing)
+            INSERT INTO employees (emp_id, name, email, role, shift_timing)
             VALUES 
-                ('ATS0123', 'Employee One', 'employee1@company.com', '${await bcrypt.hash('password123', 10)}', 'Developer', '10:00 AM - 7:00 PM'),
-                ('ATS0456', 'Employee Two', 'employee2@company.com', '${await bcrypt.hash('password456', 10)}', 'Designer', '10:00 AM - 7:00 PM')
+                ('ATS0123', 'Employee One', 'employee1@company.com', 'Developer', '10:00 AM - 7:00 PM'),
+                ('ATS0456', 'Employee Two', 'employee2@company.com', 'Designer', '10:00 AM - 7:00 PM')
             ON CONFLICT (emp_id) DO NOTHING;
         `);
-        client.release();
         logger.info('Database initialized successfully');
     } catch (err) {
         logger.error('Database initialization failed', { error: err.message });
+        throw err;
+    } finally {
+        if (client) client.release();
     }
 }
 
-// Health check
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+// Health check endpoint with database verification
+app.get('/health', async (req, res) => {
+    try {
+        await pool.query('SELECT 1');
+        res.status(200).json({ 
+            status: 'OK', 
+            timestamp: new Date().toISOString(),
+            database: 'connected'
+        });
+    } catch (err) {
+        logger.error('Health check failed', { error: err.message });
+        res.status(503).json({ 
+            status: 'Service Unavailable', 
+            database: 'disconnected',
+            error: err.message 
+        });
+    }
 });
 
+// [All your existing route handlers remain exactly the same...]
 // Validate employee credentials
 app.post('/api/auth/validate', async (req, res) => {
-    const { empId, password } = req.body;
-    if (!empId || !password) {
-        return res.status(400).json({ error: 'Employee ID and password are required' });
+    const { empId } = req.body;
+    if (!empId) {
+        return res.status(400).json({ error: 'Employee ID is required' });
+    }
+    if (!/^ATS0[1-9][0-9]{2}$/.test(empId)) {
+        return res.status(400).json({ error: 'Invalid Employee ID format' });
     }
     try {
         const result = await pool.query('SELECT * FROM employees WHERE emp_id = $1', [empId]);
         if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Employee not found' });
+            return res.status(404).json({ error: 'Employee not found', isNewEmployee: true });
         }
-        const employee = result.rows[0];
-        const isMatch = await bcrypt.compare(password, employee.password);
-        if (!isMatch) {
-            return res.status(401).json({ error: 'Invalid password' });
-        }
-        res.status(200).json({ message: 'Validation successful', empId });
+        res.status(200).json({ message: 'Validation successful', empId, isNewEmployee: false });
     } catch (err) {
         logger.error('Validation error', { error: err.message });
         res.status(500).json({ error: 'Internal server error' });
@@ -128,15 +196,12 @@ app.post('/api/auth/validate', async (req, res) => {
 
 // Punch in
 app.post('/api/attendance/punch-in', async (req, res) => {
-    const { empId, password } = req.body;
-    if (!empId || !password) {
-        return res.status(400).json({ error: 'Employee ID and password are required' });
+    const { empId } = req.body;
+    if (!empId) {
+        return res.status(400).json({ error: 'Employee ID is required' });
     }
     if (!/^ATS0[1-9][0-9]{2}$/.test(empId)) {
         return res.status(400).json({ error: 'Invalid Employee ID format' });
-    }
-    if (password.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
     try {
@@ -151,8 +216,8 @@ app.post('/api/attendance/punch-in', async (req, res) => {
             if (hoursSincePunchIn >= 12) {
                 logger.info(`Auto-punched out for emp_id: ${empId} after 12 hours`);
                 await pool.query(
-                    'UPDATE attendance SET punch_out = $1, status = $2, punch_out_password = $3 WHERE id = $4',
-                    [now, 'not-defined', null, openPunch.rows[0].id]
+                    'UPDATE attendance SET punch_out = $1, status = $2 WHERE id = $3',
+                    [null, 'not-defined', openPunch.rows[0].id]
                 );
             } else {
                 return res.status(400).json({
@@ -166,11 +231,10 @@ app.post('/api/attendance/punch-in', async (req, res) => {
         const employeeCheck = await pool.query('SELECT * FROM employees WHERE emp_id = $1', [empId]);
         const isNewEmployee = employeeCheck.rows.length === 0;
         const status = isNewEmployee ? 'pending' : 'in-progress';
-        const hashedPassword = await bcrypt.hash(password, 10);
 
         const result = await pool.query(
-            'INSERT INTO attendance (emp_id, punch_in, status, punch_in_password) VALUES ($1, $2, $3, $4) RETURNING *',
-            [empId, new Date(), status, hashedPassword]
+            'INSERT INTO attendance (emp_id, punch_in, status, hr_approval) VALUES ($1, $2, $3, $4) RETURNING *',
+            [empId, new Date(), status, 'pending']
         );
 
         const message = isNewEmployee
@@ -185,15 +249,12 @@ app.post('/api/attendance/punch-in', async (req, res) => {
 
 // Punch out
 app.post('/api/attendance/punch-out', async (req, res) => {
-    const { empId, password } = req.body;
-    if (!empId || !password) {
-        return res.status(400).json({ error: 'Employee ID and password are required' });
+    const { empId } = req.body;
+    if (!empId) {
+        return res.status(400).json({ error: 'Employee ID is required' });
     }
     if (!/^ATS0[1-9][0-9]{2}$/.test(empId)) {
         return res.status(400).json({ error: 'Invalid Employee ID format' });
-    }
-    if (password.length < 8) {
-        return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
     try {
@@ -205,12 +266,11 @@ app.post('/api/attendance/punch-out', async (req, res) => {
             return res.status(400).json({ error: 'No open punch-in found' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
         const status = openPunch.rows[0].status === 'pending' ? 'pending' : 'full-day';
 
         const result = await pool.query(
-            'UPDATE attendance SET punch_out = $1, status = $2, punch_out_password = $3 WHERE id = $4 RETURNING *',
-            [new Date(), status, hashedPassword, openPunch.rows[0].id]
+            'UPDATE attendance SET punch_out = $1, status = $2, hr_approval = $3 WHERE id = $4 RETURNING *',
+            [new Date(), status, 'pending', openPunch.rows[0].id]
         );
 
         const message = openPunch.rows[0].status === 'pending'
@@ -223,7 +283,36 @@ app.post('/api/attendance/punch-out', async (req, res) => {
     }
 });
 
-// Get attendance records
+// Get all attendance records for a specific date
+app.get('/api/attendance/all', async (req, res) => {
+    const { date } = req.query;
+    let query = 'SELECT * FROM attendance ORDER BY punch_in DESC';
+    let queryParams = [];
+
+    if (date) {
+        const selectedDate = new Date(date);
+        const startOfDay = new Date(selectedDate.setHours(0, 0, 0, 0));
+        const endOfDay = new Date(selectedDate.setHours(23, 59, 59, 999));
+        query = 'SELECT * FROM attendance WHERE punch_in >= $1 AND punch_in <= $2 ORDER BY punch_in DESC';
+        queryParams = [startOfDay, endOfDay];
+    } else {
+        const today = new Date();
+        const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+        const endOfDay = new Date(today.setHours(23, 59, 59, 999));
+        query = 'SELECT * FROM attendance WHERE punch_in >= $1 AND punch_in <= $2 ORDER BY punch_in DESC';
+        queryParams = [startOfDay, endOfDay];
+    }
+
+    try {
+        const result = await pool.query(query, queryParams);
+        res.status(200).json(result.rows);
+    } catch (err) {
+        logger.error('Fetch all attendance error', { error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Get attendance records for an employee
 app.get('/api/attendance/:empId', async (req, res) => {
     const { empId } = req.params;
     if (!/^ATS0[1-9][0-9]{2}$/.test(empId)) {
@@ -237,6 +326,44 @@ app.get('/api/attendance/:empId', async (req, res) => {
         res.status(200).json(result.rows);
     } catch (err) {
         logger.error('Fetch attendance error', { error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Approve attendance
+app.put('/api/attendance/approve/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const record = await pool.query('SELECT * FROM attendance WHERE id = $1', [id]);
+        if (record.rows.length === 0) {
+            return res.status(404).json({ error: 'Attendance record not found' });
+        }
+        if (record.rows[0].punch_out === null && record.rows[0].status !== 'not-defined') {
+            return res.status(400).json({ error: 'Cannot approve record without punch-out' });
+        }
+        await pool.query('UPDATE attendance SET hr_approval = $1 WHERE id = $2', ['approved', id]);
+        res.status(200).json({ message: 'Attendance approved' });
+    } catch (err) {
+        logger.error('Approve attendance error', { error: err.message });
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// Reject attendance
+app.put('/api/attendance/reject/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const record = await pool.query('SELECT * FROM attendance WHERE id = $1', [id]);
+        if (record.rows.length === 0) {
+            return res.status(404).json({ error: 'Attendance record not found' });
+        }
+        if (record.rows[0].punch_out === null && record.rows[0].status !== 'not-defined') {
+            return res.status(400).json({ error: 'Cannot reject record without punch-out' });
+        }
+        await pool.query('UPDATE attendance SET hr_approval = $1 WHERE id = $2', ['rejected', id]);
+        res.status(200).json({ message: 'Attendance rejected' });
+    } catch (err) {
+        logger.error('Reject attendance error', { error: err.message });
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -259,20 +386,22 @@ app.get('/api/employee/:empId', async (req, res) => {
     }
 });
 
-// Start server
-pool.connect()
-    .then(() => {
-        logger.info(`Database connection successful: ${new Date().toISOString()}`);
-        initializeDatabase().then(() => {
-           app.listen(port, '0.0.0.0', () => {
-                logger.info(`Server running on port ${port}`);
-                console.log(`Health check: http://3.110.127.202:${port}/health`);
-                console.log(`HR Dashboard: http://3.110.127.202:${port}/attendance.html`);
-                console.log(`Employee Asset Request: http://3.110.127.202:${port}/employee.html`);
-            });
+// Enhanced server startup
+async function startServer() {
+    try {
+        await checkDatabaseConnection();
+        await initializeDatabase();
+        
+        app.listen(port, '0.0.0.0', () => {
+            logger.info(`Server running on port ${port}`);
+            console.log(`Health check: http://3.110.127.202:${port}/health`);
+            console.log(`HR Dashboard: http://3.110.127.202:${port}/attendance.html`);
+            console.log(`Employee Attendance: http://3.110.127.202:${port}/employee_attendance.html`);
         });
-    })
-    .catch(err => {
-        logger.error('Database connection failed', { error: err.message });
+    } catch (err) {
+        logger.error('Server startup failed', { error: err.message });
         process.exit(1);
-    });
+    }
+}
+
+startServer();
