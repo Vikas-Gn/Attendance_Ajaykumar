@@ -1,0 +1,29 @@
+{"level":"info","message":"Database connection established successfully","timestamp":"2025-07-14T07:31:39.510Z"}
+{"level":"info","message":"Database initialized successfully","timestamp":"2025-07-14T07:31:39.557Z"}
+{"level":"info","message":"Server running on port 3096","timestamp":"2025-07-14T07:31:39.562Z"}
+{"level":"info","message":"Database connection established successfully","timestamp":"2025-07-14T07:32:45.679Z"}
+{"level":"info","message":"Database initialized successfully","timestamp":"2025-07-14T07:32:45.717Z"}
+{"level":"info","message":"Server running on port 3096","timestamp":"2025-07-14T07:32:45.724Z"}
+{"level":"info","message":"GET /api/attendance/all?date=2025-07-14","timestamp":"2025-07-14T07:33:31.987Z"}
+{"level":"info","message":"GET /api/attendance/ATS0890?date=2025-07-14","timestamp":"2025-07-14T07:33:41.102Z"}
+{"body":{"empId":"ATS0890"},"level":"info","message":"POST /api/auth/validate","timestamp":"2025-07-14T07:33:49.546Z"}
+{"body":{"empId":"ATS0890"},"level":"info","message":"POST /api/attendance/punch-in","timestamp":"2025-07-14T07:33:54.921Z"}
+{"level":"info","message":"GET /api/attendance/ATS0890?date=2025-07-14","timestamp":"2025-07-14T07:33:54.981Z"}
+{"level":"info","message":"GET /api/attendance/all?date=2025-07-14","timestamp":"2025-07-14T07:34:10.142Z"}
+{"body":{"empId":"ATS0890"},"level":"info","message":"POST /api/auth/validate","timestamp":"2025-07-14T07:34:46.372Z"}
+{"body":{"empId":"ATS0890"},"level":"info","message":"POST /api/attendance/punch-out","timestamp":"2025-07-14T07:34:47.801Z"}
+{"level":"info","message":"GET /api/attendance/ATS0890?date=2025-07-14","timestamp":"2025-07-14T07:34:47.886Z"}
+{"level":"info","message":"GET /api/attendance/all?date=2025-07-14","timestamp":"2025-07-14T07:34:53.342Z"}
+{"body":{},"level":"info","message":"PUT /api/attendance/approve/1","timestamp":"2025-07-14T07:35:02.111Z"}
+{"level":"info","message":"GET /api/attendance/all?date=2025-07-14","timestamp":"2025-07-14T07:35:02.161Z"}
+{"level":"info","message":"GET /api/attendance/ATS0234?date=2025-07-14","timestamp":"2025-07-14T07:40:56.896Z"}
+{"body":{"empId":"ATS0890"},"level":"info","message":"POST /api/auth/validate","timestamp":"2025-07-14T07:41:19.324Z"}
+{"body":{"empId":"ATS0890"},"level":"info","message":"POST /api/attendance/punch-in","timestamp":"2025-07-14T07:41:27.483Z"}
+{"level":"info","message":"GET /api/attendance/ATS0890?date=2025-07-14","timestamp":"2025-07-14T07:41:27.554Z"}
+{"level":"info","message":"GET /api/attendance/all?date=2025-07-14","timestamp":"2025-07-14T07:41:38.033Z"}
+{"body":{"empId":"ATS0890"},"level":"info","message":"POST /api/auth/validate","timestamp":"2025-07-14T07:44:00.434Z"}
+{"body":{"empId":"ATS0890"},"level":"info","message":"POST /api/attendance/punch-out","timestamp":"2025-07-14T07:44:07.214Z"}
+{"level":"info","message":"GET /api/attendance/ATS0890?date=2025-07-14","timestamp":"2025-07-14T07:44:07.274Z"}
+{"level":"info","message":"GET /api/attendance/all?date=2025-07-14","timestamp":"2025-07-14T07:44:14.265Z"}
+{"body":{},"level":"info","message":"PUT /api/attendance/approve/2","timestamp":"2025-07-14T07:44:23.624Z"}
+{"level":"info","message":"GET /api/attendance/all?date=2025-07-14","timestamp":"2025-07-14T07:44:23.704Z"}
