@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -169,7 +170,7 @@
             border: 1px solid rgba(114, 9, 183, 0.2);
         }
 
-        .dark-mode .attendance-status {
+        .dark-modeKnight .attendance-status {
             background: linear-gradient(135deg, rgba(114, 9, 183, 0.2), rgba(0, 180, 216, 0.2));
             border: 1px solid rgba(114, 9, 183, 0.3);
         }
@@ -206,7 +207,7 @@
         }
 
         .approved {
-            color:green;
+            color: green;
             background-color: white;
         }
 
@@ -294,7 +295,7 @@
             transition: all 0.3s ease;
         }
 
-        .dark-mode .form-input intercepted {
+        .dark-mode .form-input {
             background-color: #2d2d2d;
             border-color: rgba(255, 255, 255, 0.1);
             color: var(--white);
@@ -808,7 +809,7 @@
                     <form class="action-form" id="punchInForm">
                         <div class="form-group">
                             <label for="empId" class="form-label">Employee ID</label>
-                            <input type="text" id="empId" class="form-input" placeholder="Enter ATS0XXX" required pattern="^[ATS]{3}0(?!000)[0-9]{3}$" minlength="7" maxlength="7">
+                            <input type="text" id="empId" class="form-input" placeholder="Enter ATS0XXX" required pattern="^[ATS]{3}0[0-9]{3}$" minlength="7" maxlength="7">
                             <div class="error-message" id="empIdError"></div>
                         </div>
                         <div class="form-group">
@@ -894,11 +895,13 @@
         let selectedDate = new Date().toISOString().split('T')[0];
 
         // Validation regex
-        const empIdRegex = /^[ATS]{3}0(?!000)[0-9]{3}$/;
+        const empIdRegex = /^[ATS]{3}0[0-9]{3}$/;
 
         // Helper functions
         function isValidEmployeeId(id) {
-            return empIdRegex.test(id);
+            if (!empIdRegex.test(id)) return false;
+            const numPart = parseInt(id.slice(4), 10);
+            return numPart >= 1 && numPart <= 999;
         }
 
         function validateInput(input, validationFn, errorElement, errorMessage) {
@@ -921,7 +924,7 @@
                 throw new Error('Invalid Employee ID format');
             }
             try {
-                const response = await fetch('http://13.201.51.48:3096/api/auth/validate', {
+                const response = await fetch('http://65.2.177.203:3096/api/auth/validate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ empId })
@@ -941,7 +944,7 @@
 
         async function fetchAttendanceRecords(empId, date) {
             try {
-                const response = await fetch(`http://13.201.51.48:3096/api/attendance/${empId}${date ? `?date=${date}` : ''}`);
+                const response = await fetch(`http://65.2.177.203:3096/api/attendance/${empId}${date ? `?date=${date}` : ''}`);
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Failed to fetch attendance records');
                 return date ? data.filter(record => {
@@ -1024,7 +1027,7 @@
         // Record punch in
         async function recordPunchIn(empId) {
             try {
-                const response = await fetch('http://13.201.51.48:3096/api/attendance/punch-in', {
+                const response = await fetch('http://65.2.177.203:3096/api/attendance/punch-in', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ empId })
@@ -1054,7 +1057,7 @@
         // Record punch out
         async function recordPunchOut(empId) {
             try {
-                const response = await fetch('http://13.201.51.48:3096/api/attendance/punch-out', {
+                const response = await fetch('http://65.2.177.203:3096/api/attendance/punch-out', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ empId })
@@ -1090,7 +1093,7 @@
                     document.getElementById('empId'),
                     isValidEmployeeId,
                     document.getElementById('empIdError'),
-                    'ID must be ATS0 followed by 3 digits (001–999, e.g., ATS0123)'
+                    'ID must be ATS0 followed by 3 digits (001–999, e.g., ATS0001)'
                 );
                 if (isValidEmployeeId(empId)) {
                     currentEmpId = empId;
@@ -1182,7 +1185,7 @@
                     <form class="action-form" id="punchInForm">
                         <div class="form-group">
                             <label for="empId" class="form-label">Employee ID</label>
-                            <input type="text" id="empId" class="form-input" placeholder="Enter ATS0XXX" required pattern="^[ATS]{3}0(?!000)[0-9]{3}$" value="${currentEmpId || ''}">
+                            <input type="text" id="empId" class="form-input" placeholder="Enter ATS0XXX" required pattern="^[ATS]{3}0[0-9]{3}$" value="${currentEmpId || ''}">
                             <div class="error-message" id="empIdError"></div>
                         </div>
                         <div class="form-group">
@@ -1202,7 +1205,7 @@
             const empIdError = document.getElementById('empIdError');
 
             empIdInput.addEventListener('input', () => {
-                validateInput(empIdInput, isValidEmployeeId, empIdError, 'ID must be ATS0 followed by 3 digits (001–999, e.g., ATS0123)');
+                validateInput(empIdInput, isValidEmployeeId, empIdError, 'ID must be ATS0 followed by 3 digits (001–999, e.g., ATS0001)');
             });
 
             document.getElementById('punchInForm').addEventListener('submit', async (e) => {
@@ -1212,7 +1215,7 @@
                 const empId = empIdInput.value.trim();
 
                 if (!isValidEmployeeId(empId)) {
-                    showToast('Invalid Employee ID format. Use ATS0 followed by 3 digits (001–999, e.g., ATS0123)', 'error');
+                    showToast('Invalid Employee ID format. Use ATS0 followed by 3 digits (001–999, e.g., ATS0001)', 'error');
                     isSubmitting = false;
                     return;
                 }
@@ -1292,7 +1295,7 @@
                     <form class="action-form" id="punchInForm">
                         <div class="form-group">
                             <label for="empId" class="form-label">Employee ID</label>
-                            <input type="text" id="empId" class="form-input" placeholder="Enter ATS0XXX" required pattern="^[ATS]{3}0(?!000)[0-9]{3}" value="${currentEmpId || ''}">
+                            <input type="text" id="empId" class="form-input" placeholder="Enter ATS0XXX" required pattern="^[ATS]{3}0[0-9]{3}$" value="${currentEmpId || ''}">
                             <div class="error-message" id="empIdError"></div>
                         </div>
                         <div class="form-group">
@@ -1328,7 +1331,7 @@
             const empIdError = document.getElementById('empIdError');
 
             empIdInput.addEventListener('input', () => {
-                validateInput(empIdInput, isValidEmployeeId, empIdError, 'ID must be ATS0 followed by 3 digits (001-999, e.g., ATS0123)');
+                validateInput(empIdInput, isValidEmployeeId, empIdError, 'ID must be ATS0 followed by 3 digits (001-999, e.g., ATS0001)');
             });
 
             document.getElementById('punchInForm').addEventListener('submit', async (e) => {

@@ -62,9 +62,9 @@ async function checkDatabaseConnection(retries = 5, delay = 3000) {
 
 // CORS Configuration
 const allowedOrigins = [
-    'http://13.201.51.48:9063', // Frontend
-    'http://13.201.51.48:9064', // HR Page
-    'http://13.201.51.48:3096', // Backend
+    'http://65.2.177.203:9063', // Frontend
+    'http://65.2.177.203:9064', // HR Page
+    'http://65.2.177.203:3096', // Backend
     'http://localhost:3019',
     'http://127.0.0.1:5501',
     'http://127.0.0.1:5503'
@@ -137,13 +137,6 @@ async function initializeDatabase() {
                 status VARCHAR(20) DEFAULT 'pending'
             );
         `);
-        await client.query(`
-            INSERT INTO employees (emp_id, name, email, role, shift_timing)
-            VALUES 
-                ('ATS0123', 'Employee One', 'employee1@company.com', 'Developer', '10:00 AM - 7:00 PM'),
-                ('ATS0456', 'Employee Two', 'employee2@company.com', 'Designer', '10:00 AM - 7:00 PM')
-            ON CONFLICT (emp_id) DO NOTHING;
-        `);
         logger.info('Database initialized successfully');
     } catch (err) {
         logger.error('Database initialization failed', { error: err.message });
@@ -172,14 +165,13 @@ app.get('/health', async (req, res) => {
     }
 });
 
-// [All your existing route handlers remain exactly the same...]
 // Validate employee credentials
 app.post('/api/auth/validate', async (req, res) => {
     const { empId } = req.body;
     if (!empId) {
         return res.status(400).json({ error: 'Employee ID is required' });
     }
-    if (!/^ATS0[1-9][0-9]{2}$/.test(empId)) {
+    if (!/^ATS0[0-9]{3}$/.test(empId)) {
         return res.status(400).json({ error: 'Invalid Employee ID format' });
     }
     try {
@@ -200,7 +192,7 @@ app.post('/api/attendance/punch-in', async (req, res) => {
     if (!empId) {
         return res.status(400).json({ error: 'Employee ID is required' });
     }
-    if (!/^ATS0[1-9][0-9]{2}$/.test(empId)) {
+    if (!/^ATS0[0-9]{3}$/.test(empId)) {
         return res.status(400).json({ error: 'Invalid Employee ID format' });
     }
 
@@ -253,7 +245,7 @@ app.post('/api/attendance/punch-out', async (req, res) => {
     if (!empId) {
         return res.status(400).json({ error: 'Employee ID is required' });
     }
-    if (!/^ATS0[1-9][0-9]{2}$/.test(empId)) {
+    if (!/^ATS0[0-9]{3}$/.test(empId)) {
         return res.status(400).json({ error: 'Invalid Employee ID format' });
     }
 
@@ -315,7 +307,7 @@ app.get('/api/attendance/all', async (req, res) => {
 // Get attendance records for an employee
 app.get('/api/attendance/:empId', async (req, res) => {
     const { empId } = req.params;
-    if (!/^ATS0[1-9][0-9]{2}$/.test(empId)) {
+    if (!/^ATS0[0-9]{3}$/.test(empId)) {
         return res.status(400).json({ error: 'Invalid Employee ID format' });
     }
     try {
@@ -371,7 +363,7 @@ app.put('/api/attendance/reject/:id', async (req, res) => {
 // Get employee data
 app.get('/api/employee/:empId', async (req, res) => {
     const { empId } = req.params;
-    if (!/^ATS0[1-9][0-9]{2}$/.test(empId)) {
+    if (!/^ATS0[0-9]{3}$/.test(empId)) {
         return res.status(400).json({ error: 'Invalid Employee ID format' });
     }
     try {
@@ -394,9 +386,9 @@ async function startServer() {
         
         app.listen(port, '0.0.0.0', () => {
             logger.info(`Server running on port ${port}`);
-            console.log(`Health check: http://13.201.51.48:${port}/health`);
-            console.log(`HR Dashboard: http://13.201.51.48:${port}/attendance.html`);
-            console.log(`Employee Attendance: http://13.201.51.48:${port}/employee_attendance.html`);
+            console.log(`Health check: http://65.2.177.203:${port}/health`);
+            console.log(`HR Dashboard: http://65.2.177.203:${port}/attendance.html`);
+            console.log(`Employee Attendance: http://65.2.177.203:${port}/employee_attendance.html`);
         });
     } catch (err) {
         logger.error('Server startup failed', { error: err.message });
